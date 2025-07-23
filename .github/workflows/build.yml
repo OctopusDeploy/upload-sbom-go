@@ -70,14 +70,14 @@ jobs:
       - name: Tag and Push to GHCR
         run: |
           IMAGE=ghcr.io/${{ github.repository_owner }}/sbom-uploader-go
-          docker tag sbom-uploader-go:${{ needs.version.outputs.new_tag }} $IMAGE:${{ needs.version.outputs.new_tag }}
-          docker tag sbom-uploader-go:${{ needs.version.outputs.new_tag }} $IMAGE:latest
-          docker push $IMAGE:${{ needs.version.outputs.new_tag }}
+          docker tag sbom-uploader-go:${{ needs.vars.outputs.VERSION }} $IMAGE:${{ needs.vars.outputs.VERSION }}
+          docker tag sbom-uploader-go:${{ needs.vars.outputs.VERSION }} $IMAGE:latest
+          docker push $IMAGE:${{ needs.vars.outputs.VERSION }}
           docker push $IMAGE:latest
 
       - name: Save image as tar
         run: |
-          docker save sbom-uploader-go:${{ needs.version.outputs.new_tag }} -o dist/sbom-uploader-go.tar
+          docker save sbom-uploader-go:${{ needs.vars.outputs.VERSION }} -o dist/sbom-uploader-go.tar
           mkdir -p dist
           mv sbom-uploader-go.tar dist/
 
