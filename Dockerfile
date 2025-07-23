@@ -1,26 +1,23 @@
-FROM golang:1.24-alpine AS builder
+# Build
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS build
 WORKDIR /build
 
-# Copy Go source code
+# Dependency installation
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Build the app from source
 COPY . .
+ARG TARGETOS TARGETARCH
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o upload-sbom-go .
 
-# Download dependencies
-RUN go mod tidy
+# Runime image
+FROM gcr.io/distroless/static:latest
 
-# Build statically linked binary
-RUN CGO_ENABLED=0 go build -o sbom-uploader
+# Copy only the binary from the build stage to the final image
+COPY --from=build /build/upload-sbom-go /
 
-# ---- Final Minimal Image ----
-FROM alpine:3.19
-
-LABEL maintainer="colby.prior@octopus.com"
-WORKDIR /usr/bin
-
-# Copy binary from builder
-COPY --from=builder /build/sbom-uploader .
-
-# Make it executable
-RUN chmod +x sbom-uploader
-
-# Default command
-ENTRYPOINT ["sbom-uploader"]
+# Set the entry point for the container
+ENTRYPOINT ["/upload-sbom-go"]
