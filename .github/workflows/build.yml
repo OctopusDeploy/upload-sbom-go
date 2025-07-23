@@ -88,17 +88,15 @@ jobs:
     needs: [build, docker]
 
     steps:
-      - name: Download binary artifacts
+      - name: Download all binary artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries
-          path: release-assets/
+          path: all-binaries/
 
-      - name: Download Docker image
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-          path: release-assets/
+      - name: Collect all binaries into release-assets
+        run: |
+          mkdir -p release-assets
+          find all-binaries -type f -exec cp {} release-assets/ \;
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
