@@ -57,7 +57,7 @@ runs:
           -e PROJECT_VERSION='${{ inputs.project-version }}' \
           -e PROJECT_PARENT='${{ inputs.parent-name }}' \
           -e PROJECT_TAGS='${{ inputs.project-tags }}' \
-          -v "${{ github.workspace }}/${{ inputs.sbom-file }}:/sbom.json" \
+          -v "${{ github.workspace }}/${{ inputs.sbom-file }}:/tmp/sbom.json" \
           ghcr.io/octopusdeploy/sbom-uploader-go:latest \
             --sbom /tmp/sbom.json \
             --latest=${{ inputs.is-latest }}
