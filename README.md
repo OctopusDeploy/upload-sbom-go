@@ -72,6 +72,8 @@ Make sure to generate a SBOM file before using this step. The `is-latest` flag s
 Usage:
 ```
     steps:
+      - uses: actions/checkout@v4
+
       - name: Generate SBOM with Trivy
         uses: aquasecurity/trivy-action@0.32.0
         with:
