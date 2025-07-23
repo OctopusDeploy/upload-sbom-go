@@ -27,6 +27,12 @@ inputs:
   sbom-file:
     description: 'Path to the SBOM file to upload'
     required: false
+  github-actor:
+    description: 'Used for authenticating to GHCR. Commonly $\{{ github.actor }}'
+    required: true
+  github-token:
+    description: 'Used for authenticating to GHCR. Commonly $\{{ secrets.GITHUB_TOKEN }}'
+    required: true
 
 runs:
   using: "composite"
@@ -35,8 +41,8 @@ runs:
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ inputs.github-actor }}
+        password: ${{ inputs.github-token }}
 
     - name: Build sbom-uploader Docker image
       run: docker pull ghcr.io/octopusdeploy/sbom-uploader-go:latest
