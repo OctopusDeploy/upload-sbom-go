@@ -82,19 +82,6 @@ jobs:
           docker push $IMAGE:${{ steps.vars.outputs.VERSION }}
           docker push $IMAGE:latest
 
-      - name: Save image as tar
-        run: |
-          docker save sbom-uploader-go:${{ steps.vars.outputs.VERSION }} -o dist/sbom-uploader-go.tar
-          mkdir -p dist
-          mv sbom-uploader-go.tar dist/
-
-      - name: Upload Docker image
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: dist/sbom-uploader-go.tar
-
-
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
