@@ -51,12 +51,12 @@ runs:
     - name: Run uploader container
       run: |
         docker run --rm \
-          -e DEPENDENCY_TRACK_URL='${{ inputs.dependency-track-url }}' \
-          -e DEPENDENCY_TRACK_KEY='${{ inputs.dependency-track-key }}' \
-          -e PROJECT_NAME='${{ inputs.project-name }}' \
-          -e PROJECT_VERSION='${{ inputs.project-version }}' \
-          -e PROJECT_PARENT='${{ inputs.parent-name }}' \
-          -e PROJECT_TAGS='${{ inputs.project-tags }}' \
+          -e SBOM_UPLOADER_URL='${{ inputs.dependency-track-url }}' \
+          -e SBOM_UPLOADER_API_KEY='${{ inputs.dependency-track-key }}' \
+          -e SBOM_UPLOADER_NAME='${{ inputs.project-name }}' \
+          -e SBOM_UPLOADER_VERSION='${{ inputs.project-version }}' \
+          -e SBOM_UPLOADER_PARENT='${{ inputs.parent-name }}' \
+          -e SBOM_UPLOADER_TAGS='${{ inputs.project-tags }}' \
           -v "${{ github.workspace }}/${{ inputs.sbom-file }}:/tmp/sbom.json" \
           ghcr.io/octopusdeploy/sbom-uploader-go:latest \
             --sbom /tmp/sbom.json \

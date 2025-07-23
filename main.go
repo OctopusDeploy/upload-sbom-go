@@ -30,6 +30,7 @@ func main() {
 	// Create the viper instance
 	v = viper.New()
 	v.SetEnvPrefix("SBOM_UPLOADER")
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
 	err := v.BindPFlags(rootCmd.Flags())
 	if err != nil {
@@ -51,8 +52,17 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	projectVersion := v.GetString("version")
 	sbomFilePath := v.GetString("sbom")
 	// Check required inputs
-	if dependencyTrackUrl == "" || dependencyTrackKey == "" || projectName == "" || projectVersion == "" {
-		return fmt.Errorf("missing required inputs: url, api-key, name, or version (via flags or env)")
+	if dependencyTrackUrl == "" {
+		return fmt.Errorf("missing required inputs: url (via flags or env)")
+	}
+	if dependencyTrackKey == "" {
+		return fmt.Errorf("missing required inputs: api-key (via flags or env)")
+	}
+	if projectName == "" {
+		return fmt.Errorf("missing required inputs: name (via flags or env)")
+	}
+	if projectVersion == "" {
+		return fmt.Errorf("missing required inputs: version (via flags or env)")
 	}
 
 	// Read SBOM from file or stdin
@@ -133,20 +143,13 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func fallback(primary, fallback string) string {
-	if primary != "" {
-		return primary
-	}
-	return fallback
-}
-
 func setFlags(s *pflag.FlagSet) {
-	s.String("url", "", "Dependency-Track API base URL or env DEPENDENCY_TRACK_URL")
-	s.String("api-key", "", "Dependency-Track API key or env DEPENDENCY_TRACK_KEY")
-	s.String("name", "", "Project name or env PROJECT_NAME")
-	s.String("version", "", "Project version or env PROJECT_VERSION")
-	s.String("parent", "", "Parent project name or env PROJECT_PARENT")
+	s.String("url", "", "Dependency-Track API base URL or env SBOM_UPLOADER_URL")
+	s.String("api-key", "", "Dependency-Track API key or env SBOM_UPLOADER_API_KEY")
+	s.String("name", "", "Project name or env SBOM_UPLOADER_NAME")
+	s.String("version", "", "Project version or env SBOM_UPLOADER_VERSION")
+	s.String("parent", "", "Parent project name or env SBOM_UPLOADER_PARENT")
 	s.Bool("latest", true, "Mark as latest version (default true)")
-	s.String("tags", "", "Comma-separated project tags or env PROJECT_TAGS")
+	s.String("tags", "", "Comma-separated project tags or env SBOM_UPLOADER_TAGS")
 	s.String("sbom", "", "Path to SBOM file (optional; otherwise read from stdin)")
 }
