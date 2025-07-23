@@ -72,6 +72,14 @@ Make sure to generate a SBOM file before using this step. The `is-latest` flag s
 Usage:
 ```
     steps:
+      - name: Generate SBOM with Trivy
+        uses: aquasecurity/trivy-action@0.32.0
+        with:
+          format: 'cyclonedx'
+          scan-type: 'fs'
+          scan-ref: '.'
+          output: 'bom.json'
+
       - name: Upload SBOM to Dependency Track
         uses: OctopusDeploy/upload-sbom-go@v0.0.1
         with:
