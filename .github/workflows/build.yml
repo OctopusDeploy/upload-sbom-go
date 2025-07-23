@@ -57,31 +57,35 @@ jobs:
 
       - name: Extract version from tag
         id: vars
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "VERSION=$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
 
       - name: Build Docker image
         run: |
-          docker build -t sbom-uploader:${{ steps.vars.outputs.VERSION }} .
+          docker build -t sbom-uploader-go:${{ steps.vars.outputs.VERSION }} .
 
       - name: Tag and Push to GHCR
         run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/sbom-uploader
-          docker tag sbom-uploader:${{ needs.version.outputs.new_tag }} $IMAGE:${{ needs.version.outputs.new_tag }}
-          docker tag sbom-uploader:${{ needs.version.outputs.new_tag }} $IMAGE:latest
+          IMAGE=ghcr.io/${{ github.repository_owner }}/sbom-uploader-go
+          docker tag sbom-uploader-go:${{ needs.version.outputs.new_tag }} $IMAGE:${{ needs.version.outputs.new_tag }}
+          docker tag sbom-uploader-go:${{ needs.version.outputs.new_tag }} $IMAGE:latest
           docker push $IMAGE:${{ needs.version.outputs.new_tag }}
           docker push $IMAGE:latest
 
       - name: Save image as tar
         run: |
-          docker save sbom-uploader:${{ needs.version.outputs.new_tag }} -o dist/sbom-uploader.tar
+          docker save sbom-uploader-go:${{ needs.version.outputs.new_tag }} -o dist/sbom-uploader-go.tar
           mkdir -p dist
-          mv sbom-uploader.tar dist/
+          mv sbom-uploader-go.tar dist/
 
       - name: Upload Docker image
         uses: actions/upload-artifact@v4
         with:
           name: docker-image
-          path: dist/sbom-uploader.tar
+          path: dist/sbom-uploader-go.tar
 
 
   release:
