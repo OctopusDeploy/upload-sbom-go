@@ -69,7 +69,6 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-
       - name: Build Docker image
         run: |
           docker build -t sbom-uploader-go:${{ steps.vars.outputs.VERSION }} .
