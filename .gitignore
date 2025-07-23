@@ -1,0 +1,4 @@
+.idea
+.env
+upload-sbom-go
+bom.json
