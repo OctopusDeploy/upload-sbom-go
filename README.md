@@ -17,6 +17,8 @@
 `go build .`
 
 ### Docker
+`docker pull ghcr.io/octopusdeploy/sbom-uploader-go:latest`
+or build
 `docker build -t upload-sbom .`
 
 ## Usage
