@@ -67,3 +67,20 @@ docker run --rm -it --env-file=.env -v $(pwd):/tmp upload-sbom --sbom /tmp/bom.j
 ```
 
 ## GitHub Actions
+Make sure to generate a SBOM file before using this step. The `is-latest` flag should be set to `true` or `false`, likely based on if the branch is `main`. 
+
+Usage:
+```
+    steps:
+      - name: Upload SBOM to Dependency Track
+        uses: OctopusDeploy/upload-sbom-go@v0.0.1
+        with:
+          dependency-track-url: ${{ secrets. }}
+          dependency-track-key: ${{ secrets. }}
+          project-name: my-project
+          project-version: 0.0.0
+          parent-name: my-parent
+          is-latest: true
+          project-tags: tag1,tag2
+          sbom-file: "bom.json"
+```
