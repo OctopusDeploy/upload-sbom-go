@@ -32,7 +32,7 @@ runs:
   using: "composite"
   steps:
     - name: Build sbom-uploader Docker image
-      run: docker pull ghcr.io/octopusdeploy/sbom-uploader-go:latest
+      run: docker pull ghcr.io/octopusdeploy/upload-sbom-go:latest
       shell: bash
 
     - name: Run uploader container
@@ -45,7 +45,7 @@ runs:
           -e SBOM_UPLOADER_PARENT='${{ inputs.parent-name }}' \
           -e SBOM_UPLOADER_TAGS='${{ inputs.project-tags }}' \
           -v "${{ github.workspace }}/${{ inputs.sbom-file }}:/tmp/sbom.json" \
-          ghcr.io/octopusdeploy/sbom-uploader-go:latest \
+          ghcr.io/octopusdeploy/upload-sbom-go:latest \
             --sbom /tmp/sbom.json \
             --latest=${{ inputs.is-latest }}
       shell: bash
