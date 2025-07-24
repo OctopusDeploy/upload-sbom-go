@@ -71,13 +71,13 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t sbom-uploader-go:${{ steps.vars.outputs.VERSION }} .
+          docker build -t upload-sbom-go:${{ steps.vars.outputs.VERSION }} .
 
       - name: Tag and Push to GHCR
         run: |
-          IMAGE=ghcr.io/${{ steps.vars.outputs.OWNER }}/sbom-uploader-go
-          docker tag sbom-uploader-go:${{ steps.vars.outputs.VERSION }} $IMAGE:${{ steps.vars.outputs.VERSION }}
-          docker tag sbom-uploader-go:${{ steps.vars.outputs.VERSION }} $IMAGE:latest
+          IMAGE=ghcr.io/${{ steps.vars.outputs.OWNER }}/upload-sbom-go
+          docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:${{ steps.vars.outputs.VERSION }}
+          docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:latest
           docker push $IMAGE:${{ steps.vars.outputs.VERSION }}
           docker push $IMAGE:latest
 
@@ -101,12 +101,12 @@ jobs:
           docker run --rm \
           -e SBOM_UPLOADER_URL='${{ secrets.DTRACK_URL }}' \
           -e SBOM_UPLOADER_API_KEY='${{ secrets.DTRACK_KEY }}' \
-          -e SBOM_UPLOADER_NAME='sbom-uploader-go' \
+          -e SBOM_UPLOADER_NAME='upload-sbom-go' \
           -e SBOM_UPLOADER_VERSION='${{ steps.vars.outputs.VERSION }}' \
-          -e SBOM_UPLOADER_PARENT='sbom-uploader-go' \
-          -e SBOM_UPLOADER_TAGS='sbom-uploader-go' \
+          -e SBOM_UPLOADER_PARENT='upload-sbom-go' \
+          -e SBOM_UPLOADER_TAGS='upload-sbom-go' \
           -v "$(pwd)/sbom.json:/tmp/sbom.json" \
-          sbom-uploader-go:${{ steps.vars.outputs.VERSION }} \
+          upload-sbom-go:${{ steps.vars.outputs.VERSION }} \
           --sbom /tmp/sbom.json \
           --latest
 

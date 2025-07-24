@@ -17,7 +17,7 @@
 `go build .`
 
 ### Docker
-`docker pull ghcr.io/octopusdeploy/sbom-uploader-go:latest`
+`docker pull ghcr.io/octopusdeploy/upload-sbom-go:latest`
 or build
 `docker build -t upload-sbom .`
 
@@ -93,8 +93,6 @@ Usage:
           is-latest: true
           project-tags: tag1,tag2
           sbom-file: "bom.json"
-          github-actor: ${{ github.actor }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Dependency Track API Key
@@ -103,3 +101,17 @@ When creating a Dependency Track API key the permissions required are as follows
   - _Required for creating the project._
 - BOM_UPLOAD
   - _Required for uploading the SBOM._
+
+## Common Errors
+### HTTP 403 upload failed
+If you encounter an HTTP `403` error this means your API key does not have the appropriate access. See (Dependency Track API Key) above.
+```
+Execution failed: upload failed (403): 
+Error: Process completed with exit code 1.
+```
+
+### HTTP 404 upload failed
+If your action runs into an HTTP `404` error it is because the parent project does not exist. You must manually create a parent project in Dependency Track first.
+```
+Error: upload failed (404): The parent component could not be found.
+```
