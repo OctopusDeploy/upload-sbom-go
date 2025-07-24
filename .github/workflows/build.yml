@@ -105,7 +105,7 @@ jobs:
           -e SBOM_UPLOADER_VERSION='${{ steps.vars.outputs.VERSION }}' \
           -e SBOM_UPLOADER_PARENT='sbom-uploader-go' \
           -e SBOM_UPLOADER_TAGS='sbom-uploader-go' \
-          -v "${{ github.workspace }}/${{ inputs.sbom-file }}:/tmp/sbom.json" \
+          -v "sbom.json:/tmp/sbom.json" \
           sbom-uploader-go:${{ steps.vars.outputs.VERSION }} \
           --sbom /tmp/sbom.json \
           --latest
