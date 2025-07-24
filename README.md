@@ -103,3 +103,17 @@ When creating a Dependency Track API key the permissions required are as follows
   - _Required for creating the project._
 - BOM_UPLOAD
   - _Required for uploading the SBOM._
+
+## Common Errors
+### HTTP 403 upload failed
+If you encounter an HTTP `403` error this means your API key does not have the appropriate access. See (Dependency Track API Key) above.
+```
+Execution failed: upload failed (403): 
+Error: Process completed with exit code 1.
+```
+
+### HTTP 404 upload failed
+If your action runs into an HTTP `404` error it is because the parent project does not exist. You must manually create a parent project in Dependency Track first.
+```
+Error: upload failed (404): The parent component could not be found.
+```
