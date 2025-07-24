@@ -81,6 +81,35 @@ jobs:
           docker push $IMAGE:${{ steps.vars.outputs.VERSION }}
           docker push $IMAGE:latest
 
+      - name: Generate SBOM with Trivy
+        uses: aquasecurity/trivy-action@0.32.0
+        with:
+          format: 'cyclonedx'
+          scan-type: 'fs'
+          scan-ref: 'go.mod'
+          output: 'sbom.json'
+
+      - name: Upload SBOM as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom.json
+          path: sbom.json
+          overwrite: true
+
+      - name: Upload SBOM to Dependency Track. How meta 🤯
+        run: |
+          docker run --rm \
+          -e SBOM_UPLOADER_URL='${{ secrets.DTRACK_URL }}' \
+          -e SBOM_UPLOADER_API_KEY='${{ secrets.DTRACK_KEY }}' \
+          -e SBOM_UPLOADER_NAME='sbom-uploader-go' \
+          -e SBOM_UPLOADER_VERSION='${{ steps.vars.outputs.VERSION }}' \
+          -e SBOM_UPLOADER_PARENT='sbom-uploader-go' \
+          -e SBOM_UPLOADER_TAGS='sbom-uploader-go' \
+          -v "${{ github.workspace }}/${{ inputs.sbom-file }}:/tmp/sbom.json" \
+          sbom-uploader-go:${{ steps.vars.outputs.VERSION }} \
+          --sbom /tmp/sbom.json \
+          --latest
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
