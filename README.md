@@ -93,8 +93,6 @@ Usage:
           is-latest: true
           project-tags: tag1,tag2
           sbom-file: "bom.json"
-          github-actor: ${{ github.actor }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Dependency Track API Key
