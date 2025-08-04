@@ -83,7 +83,7 @@ Usage:
           output: 'bom.json'
 
       - name: Upload SBOM to Dependency Track
-        uses: OctopusDeploy/upload-sbom-go@v0.0.2
+        uses: OctopusDeploy/upload-sbom-go@v1.0.0
         with:
           dependency-track-url: ${{ secrets. }}
           dependency-track-key: ${{ secrets. }}
