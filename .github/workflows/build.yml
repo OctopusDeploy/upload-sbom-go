@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*.*.*'  # Triggers on version tags like v1.2.3
+    branches:
+      - 'artifactory'
 
 permissions:
   contents: write
@@ -74,6 +76,21 @@ jobs:
           docker build -t upload-sbom-go:${{ steps.vars.outputs.VERSION }} .
 
       - name: Tag and Push to GHCR
+        run: |
+          IMAGE=ghcr.io/${{ steps.vars.outputs.OWNER }}/upload-sbom-go
+          docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:${{ steps.vars.outputs.VERSION }}
+          docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:latest
+          docker push $IMAGE:${{ steps.vars.outputs.VERSION }}
+          docker push $IMAGE:latest
+
+      - name: Log in to Artifactory
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ARTIFACTORY_DOMAIN }}
+          username: ${{ secrets.ARTIFACTORY_USERNAME }}
+          password: ${{ secrets.ARTIFACTORY_TOKEN }}
+
+      - name: Tag and Push to Artifactory
         run: |
           IMAGE=ghcr.io/${{ steps.vars.outputs.OWNER }}/upload-sbom-go
           docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:${{ steps.vars.outputs.VERSION }}
