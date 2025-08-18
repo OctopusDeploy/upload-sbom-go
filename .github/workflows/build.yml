@@ -90,7 +90,7 @@ jobs:
 
       - name: Tag and Push to Artifactory
         run: |
-          IMAGE=ghcr.io/${{ steps.vars.outputs.OWNER }}/upload-sbom-go
+          IMAGE=${{ secrets.ARTIFACTORY_DOMAIN }}/octopusdeploy/secops/upload-sbom-go
           docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:${{ steps.vars.outputs.VERSION }}
           docker tag upload-sbom-go:${{ steps.vars.outputs.VERSION }} $IMAGE:latest
           docker push $IMAGE:${{ steps.vars.outputs.VERSION }}
