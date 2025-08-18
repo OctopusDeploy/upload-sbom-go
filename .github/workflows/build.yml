@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - 'v*.*.*'  # Triggers on version tags like v1.2.3
-    branches:
-      - 'artifactory'
 
 permissions:
   contents: write
