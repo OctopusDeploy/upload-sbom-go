@@ -3,14 +3,16 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -83,53 +85,70 @@ func runUploader(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Prepare multipart/form-data
-	var requestBody bytes.Buffer
-	writer := multipart.NewWriter(&requestBody)
+	maxRetries := 6
+	var resp *http.Response
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Prepare multipart/form-data
+		var requestBody bytes.Buffer
+		writer := multipart.NewWriter(&requestBody)
 
-	// Add SBOM file part
-	sbomPart, err := writer.CreateFormFile("bom", "sbom.json")
-	if err != nil {
-		return fmt.Errorf("failed to create SBOM form part: %w", err)
-	}
-	if _, err := sbomPart.Write(sbomContent); err != nil {
-		return fmt.Errorf("failed to write SBOM content: %w", err)
+		// Add SBOM file part
+		sbomPart, err := writer.CreateFormFile("bom", "sbom.json")
+		if err != nil {
+			return fmt.Errorf("failed to create SBOM form part: %w", err)
+		}
+		if _, err := sbomPart.Write(sbomContent); err != nil {
+			return fmt.Errorf("failed to write SBOM content: %w", err)
+		}
+
+		// Add metadata fields
+		_ = writer.WriteField("projectName", projectName)
+		_ = writer.WriteField("projectVersion", projectVersion)
+		_ = writer.WriteField("autoCreate", "true")
+
+		if v.GetBool("latest") {
+			_ = writer.WriteField("isLatest", "true")
+		}
+		if v := v.GetString("parent"); v != "" {
+			_ = writer.WriteField("parentName", v)
+		}
+		if projectTags := v.GetString("tags"); projectTags != "" {
+			_ = writer.WriteField("projectTags", projectTags)
+		}
+
+		// Close writer to finalize body
+		if err := writer.Close(); err != nil {
+			return fmt.Errorf("failed to finalize multipart body: %w", err)
+		}
+
+		url := fmt.Sprintf("%s/api/v1/bom", strings.TrimRight(dependencyTrackUrl, "/"))
+		req, err := http.NewRequest("POST", url, &requestBody)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("X-Api-Key", dependencyTrackKey)
+		transport := &http.Transport{
+			DisableKeepAlives: true,
+		}
+		client := &http.Client{Transport: transport}
+		resp, err = client.Do(req)
+
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+		// exponential backoff: baseDelay * 2^attempt
+		sleep := 15 * time.Second * (1 << attempt)
+		if err != nil {
+			fmt.Printf("HTTP request failed: %s. (attempt %d/%d). Retrying in %s...\n", err, attempt+1, maxRetries+1, sleep)
+		} else if resp.StatusCode != http.StatusOK {
+			fmt.Printf("HTTP request not OK: %s. (attempt %d/%d). Retrying in %s...\n", resp.Status, attempt+1, maxRetries+1, sleep)
+		}
+		time.Sleep(sleep)
 	}
 
-	// Add metadata fields
-	_ = writer.WriteField("projectName", projectName)
-	_ = writer.WriteField("projectVersion", projectVersion)
-	_ = writer.WriteField("autoCreate", "true")
-
-	if v.GetBool("latest") {
-		_ = writer.WriteField("isLatest", "true")
-	}
-	if v := v.GetString("parent"); v != "" {
-		_ = writer.WriteField("parentName", v)
-	}
-	if projectTags := v.GetString("tags"); projectTags != "" {
-		_ = writer.WriteField("projectTags", projectTags)
-	}
-
-	// Close writer to finalize body
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("failed to finalize multipart body: %w", err)
-	}
-
-	// Create HTTP request
-	url := fmt.Sprintf("%s/api/v1/bom", strings.TrimRight(dependencyTrackUrl, "/"))
-	req, err := http.NewRequest("POST", url, &requestBody)
-	if err != nil {
+	if err != nil || resp == nil {
 		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("X-Api-Key", dependencyTrackKey)
-
-	// Execute request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
