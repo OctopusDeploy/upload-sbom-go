@@ -10,19 +10,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 var (
-	dependencyTrackUrl string
-	dependencyTrackKey string
-	projectName        string
-	projectVersion     string
-	parentName         string
-	isLatest           bool
-	projectTags        string
-	sbomFilePath       string
+	v *viper.Viper
 )
 
 func main() {
@@ -32,14 +28,19 @@ func main() {
 		RunE:  runUploader,
 	}
 
-	rootCmd.Flags().StringVar(&dependencyTrackUrl, "url", "", "Dependency-Track API base URL or env DEPENDENCY_TRACK_URL")
-	rootCmd.Flags().StringVar(&dependencyTrackKey, "api-key", "", "Dependency-Track API key or env DEPENDENCY_TRACK_KEY")
-	rootCmd.Flags().StringVar(&projectName, "name", "", "Project name or env PROJECT_NAME")
-	rootCmd.Flags().StringVar(&projectVersion, "version", "", "Project version or env PROJECT_VERSION")
-	rootCmd.Flags().StringVar(&parentName, "parent", "", "Parent project name or env PROJECT_PARENT")
-	rootCmd.Flags().BoolVar(&isLatest, "latest", true, "Mark as latest version (default true)")
-	rootCmd.Flags().StringVar(&projectTags, "tags", "", "Comma-separated project tags or env PROJECT_TAGS")
-	rootCmd.Flags().StringVar(&sbomFilePath, "sbom", "", "Path to SBOM file (optional; otherwise read from stdin)")
+	// Initialise flags
+	setFlags(rootCmd.Flags())
+
+	// Create the viper instance
+	v = viper.New()
+	v.SetEnvPrefix("SBOM_UPLOADER")
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	v.AutomaticEnv()
+	err := v.BindPFlags(rootCmd.Flags())
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to bind flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Execution failed: %v\n", err)
@@ -48,16 +49,24 @@ func main() {
 }
 
 func runUploader(cmd *cobra.Command, args []string) error {
-	dependencyTrackUrl = fallback(dependencyTrackUrl, os.Getenv("DEPENDENCY_TRACK_URL"))
-	dependencyTrackKey = fallback(dependencyTrackKey, os.Getenv("DEPENDENCY_TRACK_KEY"))
-	projectName = fallback(projectName, os.Getenv("PROJECT_NAME"))
-	projectVersion = fallback(projectVersion, os.Getenv("PROJECT_VERSION"))
-	parentName = fallback(parentName, os.Getenv("PROJECT_PARENT"))
-	projectTags = fallback(projectTags, os.Getenv("PROJECT_TAGS"))
 
+	dependencyTrackUrl := v.GetString("url")
+	dependencyTrackKey := v.GetString("api-key")
+	projectName := v.GetString("name")
+	projectVersion := v.GetString("version")
+	sbomFilePath := v.GetString("sbom")
 	// Check required inputs
-	if dependencyTrackUrl == "" || dependencyTrackKey == "" || projectName == "" || projectVersion == "" {
-		return fmt.Errorf("missing required inputs: url, api-key, name, or version (via flags or env)")
+	if dependencyTrackUrl == "" {
+		return fmt.Errorf("missing required inputs: url (via flags or env)")
+	}
+	if dependencyTrackKey == "" {
+		return fmt.Errorf("missing required inputs: api-key (via flags or env)")
+	}
+	if projectName == "" {
+		return fmt.Errorf("missing required inputs: name (via flags or env)")
+	}
+	if projectVersion == "" {
+		return fmt.Errorf("missing required inputs: version (via flags or env)")
 	}
 
 	// Read SBOM from file or stdin
@@ -92,18 +101,18 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	}
 
 	// Add metadata fields
-	writer.WriteField("projectName", projectName)
-	writer.WriteField("projectVersion", projectVersion)
-	writer.WriteField("autoCreate", "true")
+	_ = writer.WriteField("projectName", projectName)
+	_ = writer.WriteField("projectVersion", projectVersion)
+	_ = writer.WriteField("autoCreate", "true")
 
-	if isLatest {
-		writer.WriteField("isLatest", "true")
+	if v.GetBool("latest") {
+		_ = writer.WriteField("isLatest", "true")
 	}
-	if parentName != "" {
-		writer.WriteField("parentName", parentName)
+	if v := v.GetString("parent"); v != "" {
+		_ = writer.WriteField("parentName", v)
 	}
-	if projectTags != "" {
-		writer.WriteField("projectTags", projectTags)
+	if projectTags := v.GetString("tags"); projectTags != "" {
+		_ = writer.WriteField("projectTags", projectTags)
 	}
 
 	// Close writer to finalize body
@@ -142,11 +151,15 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func fallback(primary, fallback string) string {
-	if primary != "" {
-		return primary
-	}
-	return fallback
+func setFlags(s *pflag.FlagSet) {
+	s.String("url", "", "Dependency-Track API base URL or env SBOM_UPLOADER_URL")
+	s.String("api-key", "", "Dependency-Track API key or env SBOM_UPLOADER_API_KEY")
+	s.String("name", "", "Project name or env SBOM_UPLOADER_NAME")
+	s.String("version", "", "Project version or env SBOM_UPLOADER_VERSION")
+	s.String("parent", "", "Parent project name or env SBOM_UPLOADER_PARENT")
+	s.Bool("latest", true, "Mark as latest version (default true)")
+	s.String("tags", "", "Comma-separated project tags or env SBOM_UPLOADER_TAGS")
+	s.String("sbom", "", "Path to SBOM file (optional; otherwise read from stdin)")
 }
 
 func checkRetry(ctx context.Context, resp *http.Response, err error) (bool, error) {
