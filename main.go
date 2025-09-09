@@ -2,13 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"github.com/spf13/cobra"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -110,7 +113,7 @@ func runUploader(cmd *cobra.Command, args []string) error {
 
 	// Create HTTP request
 	url := fmt.Sprintf("%s/api/v1/bom", strings.TrimRight(dependencyTrackUrl, "/"))
-	req, err := http.NewRequest("POST", url, &requestBody)
+	req, err := retryablehttp.NewRequest("POST", url, &requestBody)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -118,12 +121,16 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	req.Header.Set("X-Api-Key", dependencyTrackKey)
 
 	// Execute request
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 20
+	retryClient.CheckRetry = checkRetry
+	resp, err := retryClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	respBody, _ := io.ReadAll(resp.Body)
 
@@ -140,4 +147,11 @@ func fallback(primary, fallback string) string {
 		return primary
 	}
 	return fallback
+}
+
+func checkRetry(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	if resp != nil && resp.StatusCode >= 404 {
+		return true, nil
+	}
+	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }
