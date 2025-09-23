@@ -27,17 +27,16 @@ type Tag struct {
 }
 
 type Project struct {
-	UUID        string    `json:"uuid,omitempty"`
-	Name        string    `json:"name"`
-	Classifier  string    `json:"classifier,omitempty"`
-	Version     string    `json:"version,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Active      bool      `json:"active,omitempty"`
-	Tags        []Tag     `json:"tags,omitempty"`
-	Children    []Project `json:"children,omitempty"`
-	Parent      *Project  `json:"parent,omitempty"`
-	//Created         time.Time `json:"created,omitempty"`
-	CollectionLogic string `json:"collectionLogic,omitempty"`
+	UUID            string    `json:"uuid,omitempty"`
+	Name            string    `json:"name"`
+	Classifier      string    `json:"classifier,omitempty"`
+	Version         string    `json:"version,omitempty"`
+	Description     string    `json:"description,omitempty"`
+	Active          bool      `json:"active,omitempty"`
+	Tags            []Tag     `json:"tags,omitempty"`
+	Children        []Project `json:"children,omitempty"`
+	Parent          *Project  `json:"parent,omitempty"`
+	CollectionLogic string    `json:"collectionLogic,omitempty"`
 }
 
 func main() {
@@ -67,13 +66,19 @@ func main() {
 	}
 }
 
-func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentName string) error {
+func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string) error {
 	url := fmt.Sprintf("%s/api/v1/project", strings.TrimRight(dependencyTrackUrl, "/"))
 	newProject := &Project{
 		Name:            parentName,
 		Classifier:      "APPLICATION",
 		CollectionLogic: "AGGREGATE_LATEST_VERSION_CHILDREN",
+		Tags:            []Tag{},
 	}
+
+	for _, tag := range strings.Split(tags, ",") {
+		newProject.Tags = append(newProject.Tags, Tag{Name: tag})
+	}
+
 	jsonBody, err := json.Marshal(newProject)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request body: %w", err)
@@ -102,7 +107,7 @@ func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentNa
 	return nil
 }
 
-func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, parentName string) error {
+func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string) error {
 	url := fmt.Sprintf("%s/api/v1/project/lookup?name=%s", strings.TrimRight(dependencyTrackUrl, "/"), parentName)
 	req, err := retryablehttp.NewRequest("GET", url, nil)
 	if err != nil {
@@ -119,10 +124,9 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 	}
 	var project Project
 	err = json.NewDecoder(resp.Body).Decode(&project)
-	//return nil, fmt.Errorf("failed to decode response: %w", err)
 	if project.Name == "" {
 		fmt.Println("Parent project not found... creating a new one")
-		err := createParent(dependencyTrackUrl, dependencyTrackKey, parentName)
+		err := createParent(dependencyTrackUrl, dependencyTrackKey, parentName, tags)
 		if err != nil {
 			return err
 		}
@@ -131,7 +135,7 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 	return nil
 }
 
-func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string) error {
+func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string, tags string) error {
 	// Read SBOM from file or stdin
 	var sbomContent []byte
 	var err error
@@ -168,12 +172,10 @@ func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectNam
 	_ = writer.WriteField("parentName", parentName)
 	_ = writer.WriteField("projectVersion", projectVersion)
 	_ = writer.WriteField("autoCreate", "true")
+	_ = writer.WriteField("tags", tags)
 
 	if v.GetBool("latest") {
 		_ = writer.WriteField("isLatest", "true")
-	}
-	if projectTags := v.GetString("tags"); projectTags != "" {
-		_ = writer.WriteField("projectTags", projectTags)
 	}
 
 	// Close writer to finalize body
@@ -202,11 +204,6 @@ func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectNam
 		_ = Body.Close()
 	}(resp.Body)
 
-	respBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, string(respBody))
-	}
 	return nil
 }
 
@@ -234,12 +231,16 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	if projectVersion == "" {
 		return fmt.Errorf("missing required inputs: version (via flags or env)")
 	}
+	tags := ""
+	if projectTags := v.GetString("tags"); projectTags != "" {
+		tags = projectTags
+	}
 
-	err := ensureParentExists(dependencyTrackUrl, dependencyTrackKey, parentName)
+	err := ensureParentExists(dependencyTrackUrl, dependencyTrackKey, parentName, tags)
 	if err != nil {
 		return err
 	}
-	err = uploadSbom(dependencyTrackUrl, dependencyTrackKey, projectName, parentName, projectVersion, sbomFilePath)
+	err = uploadSbom(dependencyTrackUrl, dependencyTrackKey, projectName, parentName, projectVersion, sbomFilePath, tags)
 	if err != nil {
 		return err
 	}
