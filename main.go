@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -20,6 +21,23 @@ import (
 var (
 	v *viper.Viper
 )
+
+type Tag struct {
+	Name string `json:"name"`
+}
+
+type Project struct {
+	UUID            string    `json:"uuid,omitempty"`
+	Name            string    `json:"name"`
+	Classifier      string    `json:"classifier,omitempty"`
+	Version         string    `json:"version,omitempty"`
+	Description     string    `json:"description,omitempty"`
+	Active          bool      `json:"active,omitempty"`
+	Tags            []Tag     `json:"tags,omitempty"`
+	Children        []Project `json:"children,omitempty"`
+	Parent          *Project  `json:"parent,omitempty"`
+	CollectionLogic string    `json:"collectionLogic,omitempty"`
+}
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -48,27 +66,76 @@ func main() {
 	}
 }
 
-func runUploader(cmd *cobra.Command, args []string) error {
-
-	dependencyTrackUrl := v.GetString("url")
-	dependencyTrackKey := v.GetString("api-key")
-	projectName := v.GetString("name")
-	projectVersion := v.GetString("version")
-	sbomFilePath := v.GetString("sbom")
-	// Check required inputs
-	if dependencyTrackUrl == "" {
-		return fmt.Errorf("missing required inputs: url (via flags or env)")
-	}
-	if dependencyTrackKey == "" {
-		return fmt.Errorf("missing required inputs: api-key (via flags or env)")
-	}
-	if projectName == "" {
-		return fmt.Errorf("missing required inputs: name (via flags or env)")
-	}
-	if projectVersion == "" {
-		return fmt.Errorf("missing required inputs: version (via flags or env)")
+func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string) error {
+	url := fmt.Sprintf("%s/api/v1/project", strings.TrimRight(dependencyTrackUrl, "/"))
+	newProject := &Project{
+		Name:            parentName,
+		Classifier:      "APPLICATION",
+		CollectionLogic: "AGGREGATE_LATEST_VERSION_CHILDREN",
+		Tags:            []Tag{},
 	}
 
+	for _, tag := range strings.Split(tags, ",") {
+		newProject.Tags = append(newProject.Tags, Tag{Name: tag})
+	}
+
+	jsonBody, err := json.Marshal(newProject)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+	reqBody := bytes.NewBuffer(jsonBody)
+
+	req, err := retryablehttp.NewRequest("PUT", url, reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("X-Api-Key", dependencyTrackKey)
+	req.Header.Set("Content-Type", "application/json")
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 20
+	resp, err := retryClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	print(respBody)
+	return nil
+}
+
+func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string) error {
+	url := fmt.Sprintf("%s/api/v1/project/lookup?name=%s", strings.TrimRight(dependencyTrackUrl, "/"), parentName)
+	req, err := retryablehttp.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("X-Api-Key", dependencyTrackKey)
+
+	// Execute request
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 20
+	resp, err := retryClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	var project Project
+	err = json.NewDecoder(resp.Body).Decode(&project)
+	if project.Name == "" {
+		fmt.Println("Parent project not found... creating a new one")
+		err := createParent(dependencyTrackUrl, dependencyTrackKey, parentName, tags)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string, tags string) error {
 	// Read SBOM from file or stdin
 	var sbomContent []byte
 	var err error
@@ -102,17 +169,13 @@ func runUploader(cmd *cobra.Command, args []string) error {
 
 	// Add metadata fields
 	_ = writer.WriteField("projectName", projectName)
+	_ = writer.WriteField("parentName", parentName)
 	_ = writer.WriteField("projectVersion", projectVersion)
 	_ = writer.WriteField("autoCreate", "true")
+	_ = writer.WriteField("tags", tags)
 
 	if v.GetBool("latest") {
 		_ = writer.WriteField("isLatest", "true")
-	}
-	if v := v.GetString("parent"); v != "" {
-		_ = writer.WriteField("parentName", v)
-	}
-	if projectTags := v.GetString("tags"); projectTags != "" {
-		_ = writer.WriteField("projectTags", projectTags)
 	}
 
 	// Close writer to finalize body
@@ -141,10 +204,45 @@ func runUploader(cmd *cobra.Command, args []string) error {
 		_ = Body.Close()
 	}(resp.Body)
 
-	respBody, _ := io.ReadAll(resp.Body)
+	return nil
+}
 
-	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload failed (%d): %s", resp.StatusCode, string(respBody))
+func runUploader(cmd *cobra.Command, args []string) error {
+
+	dependencyTrackUrl := v.GetString("url")
+	dependencyTrackKey := v.GetString("api-key")
+	projectName := v.GetString("name")
+	parentName := v.GetString("parent")
+	projectVersion := v.GetString("version")
+	sbomFilePath := v.GetString("sbom")
+	// Check required inputs
+	if dependencyTrackUrl == "" {
+		return fmt.Errorf("missing required inputs: url (via flags or env)")
+	}
+	if dependencyTrackKey == "" {
+		return fmt.Errorf("missing required inputs: api-key (via flags or env)")
+	}
+	if projectName == "" {
+		return fmt.Errorf("missing required inputs: name (via flags or env)")
+	}
+	if parentName == "" {
+		return fmt.Errorf("missing required inputs: name (via flags or env)")
+	}
+	if projectVersion == "" {
+		return fmt.Errorf("missing required inputs: version (via flags or env)")
+	}
+	tags := ""
+	if projectTags := v.GetString("tags"); projectTags != "" {
+		tags = projectTags
+	}
+
+	err := ensureParentExists(dependencyTrackUrl, dependencyTrackKey, parentName, tags)
+	if err != nil {
+		return err
+	}
+	err = uploadSbom(dependencyTrackUrl, dependencyTrackKey, projectName, parentName, projectVersion, sbomFilePath, tags)
+	if err != nil {
+		return err
 	}
 
 	fmt.Println("✅ SBOM upload successful.")
