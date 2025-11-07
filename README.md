@@ -1,6 +1,9 @@
 # Upload SBOM Go
 
+Uploads SBOM data to a [Dependency-Track](https://dependencytrack.org) instance.
+
 ## Input Variables
+
 | Flag      | Env Var               | Description                                             |
 |-----------|-----------------------|---------------------------------------------------------|
 | --url     | SBOM_UPLOADER_URL     | Dependency-Track API base URL                           |
@@ -13,17 +16,22 @@
 | --sbom    |                       | Path to SBOM file (optional; otherwise read from stdin) |
 
 ## Building
+
 ### Go
+
 `go build .`
 
 ### Docker
+
 `docker pull ghcr.io/octopusdeploy/upload-sbom-go:latest`
 or build
 `docker build -t upload-sbom .`
 
 ## Usage
+
 ### CLI
-```
+
+```shell
 ./upload-sbom-go 
 Usage:
   sbom-uploader [flags]
@@ -41,18 +49,28 @@ Flags:
 ```
 
 ### Docker Volume Mount
+
 When using Docker the SBOM file should be mounted as a volume mount.
 
-```
+```shell
 ls bom.json # Sbom file locally on filesystem
-docker run --rm -it -e SBOM_UPLOADER_API_KEY="SBOM_UPLOADER_API_KEY" -v $(pwd):/tmp upload-sbom --url "https://dependencytrack-api.local" --version "0.0.1" --tags "tag1,tag2" --parent "parentname" --name "projectname" --latest --sbom /tmp/bom.json
+docker run --rm -it \
+  -e SBOM_UPLOADER_API_KEY="SBOM_UPLOADER_API_KEY" \
+  --mount "type=bind,src=$(pwd),target=/tmp" \
+   ghcr.io/octopusdeploy/upload-sbom-go:latest \
+   --url "https://dependencytrack-api.local" \
+   --version "0.0.1" --tags "tag1,tag2" --parent "parentname" \
+   --name "projectname" \
+   --latest --sbom /tmp/bom.json
 ```
 
 ### Docker ENV Vars
+
 Env vars can be stored in a file and passed in using the `env-file` argument.
 
 Env File `.env`:
-```
+
+```ini
 SBOM_UPLOADER_URL=https://dependencytrack-api.local
 SBOM_UPLOADER_API_KEY=FOOBAR
 SBOM_UPLOADER_NAME=projectname
@@ -62,15 +80,18 @@ SBOM_UPLOADER_TAGS=tag1,tag2
 ```
 
 Running Docker:
-```
+
+```shell
 docker run --rm -it --env-file=.env -v $(pwd):/tmp upload-sbom --sbom /tmp/bom.json
 ```
 
 ## GitHub Actions
-Make sure to generate a SBOM file before using this step. The `is-latest` flag should be set to `true` or `false`, likely based on if the branch is `main`. 
+
+Make sure to generate a SBOM file before using this step. The `is-latest` flag should be set to `true` or `false`, likely based on if the branch is `main`.
 
 Usage:
-```
+
+```yaml
     steps:
       - uses: actions/checkout@v4
 
@@ -96,22 +117,29 @@ Usage:
 ```
 
 ## Dependency Track API Key
+
 When creating a Dependency Track API key the permissions required are as follows:
+
 - PROJECT_CREATION_UPLOAD
   - _Required for creating the project._
 - BOM_UPLOAD
   - _Required for uploading the SBOM._
 
 ## Common Errors
+
 ### HTTP 403 upload failed
+
 If you encounter an HTTP `403` error this means your API key does not have the appropriate access. See (Dependency Track API Key) above.
-```
+
+```text
 Execution failed: upload failed (403): 
 Error: Process completed with exit code 1.
 ```
 
 ### HTTP 404 upload failed
+
 If your action runs into an HTTP `404` error it is because the parent project does not exist. You must manually create a parent project in Dependency Track first.
-```
+
+```text
 Error: upload failed (404): The parent component could not be found.
 ```
