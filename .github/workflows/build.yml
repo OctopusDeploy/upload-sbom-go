@@ -82,7 +82,7 @@ jobs:
           docker push $IMAGE:latest
 
       - name: Generate SBOM with Trivy
-        uses: aquasecurity/trivy-action@0.32.0
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           format: 'cyclonedx'
           scan-type: 'fs'
