@@ -39,6 +39,13 @@ type Project struct {
 	CollectionLogic string    `json:"collectionLogic,omitempty"`
 }
 
+func newDefaultRetryClient() *retryablehttp.Client {
+	c := retryablehttp.NewClient()
+	c.RetryMax = 20
+	c.CheckRetry = checkRetry
+	return c
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "sbom-uploader",
@@ -66,7 +73,7 @@ func main() {
 	}
 }
 
-func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string) error {
+func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string, client *retryablehttp.Client) error {
 	url := fmt.Sprintf("%s/api/v1/project", strings.TrimRight(dependencyTrackUrl, "/"))
 	newProject := &Project{
 		Name:            parentName,
@@ -91,9 +98,7 @@ func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentNa
 	}
 	req.Header.Set("X-Api-Key", dependencyTrackKey)
 	req.Header.Set("Content-Type", "application/json")
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 20
-	resp, err := retryClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -107,7 +112,7 @@ func createParent(dependencyTrackUrl string, dependencyTrackKey string, parentNa
 	return nil
 }
 
-func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string) error {
+func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, parentName string, tags string, client *retryablehttp.Client) error {
 	url := fmt.Sprintf("%s/api/v1/project/lookup?name=%s", strings.TrimRight(dependencyTrackUrl, "/"), parentName)
 	req, err := retryablehttp.NewRequest("GET", url, nil)
 	if err != nil {
@@ -115,10 +120,7 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 	}
 	req.Header.Set("X-Api-Key", dependencyTrackKey)
 
-	// Execute request
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 20
-	resp, err := retryClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -126,7 +128,7 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 	err = json.NewDecoder(resp.Body).Decode(&project)
 	if project.Name == "" {
 		fmt.Println("Parent project not found... creating a new one")
-		err := createParent(dependencyTrackUrl, dependencyTrackKey, parentName, tags)
+		err := createParent(dependencyTrackUrl, dependencyTrackKey, parentName, tags, client)
 		if err != nil {
 			return err
 		}
@@ -135,7 +137,7 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 	return nil
 }
 
-func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string, tags string) error {
+func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string, tags string, client *retryablehttp.Client) error {
 	// Read SBOM from file or stdin
 	var sbomContent []byte
 	var err error
@@ -192,17 +194,18 @@ func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectNam
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("X-Api-Key", dependencyTrackKey)
 
-	// Execute request
-	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 20
-	retryClient.CheckRetry = checkRetry
-	resp, err := retryClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, respBody)
+	}
 
 	return nil
 }
@@ -236,11 +239,13 @@ func runUploader(cmd *cobra.Command, args []string) error {
 		tags = projectTags
 	}
 
-	err := ensureParentExists(dependencyTrackUrl, dependencyTrackKey, parentName, tags)
+	client := newDefaultRetryClient()
+
+	err := ensureParentExists(dependencyTrackUrl, dependencyTrackKey, parentName, tags, client)
 	if err != nil {
 		return err
 	}
-	err = uploadSbom(dependencyTrackUrl, dependencyTrackKey, projectName, parentName, projectVersion, sbomFilePath, tags)
+	err = uploadSbom(dependencyTrackUrl, dependencyTrackKey, projectName, parentName, projectVersion, sbomFilePath, tags, client)
 	if err != nil {
 		return err
 	}
@@ -261,8 +266,8 @@ func setFlags(s *pflag.FlagSet) {
 }
 
 func checkRetry(ctx context.Context, resp *http.Response, err error) (bool, error) {
-	if resp != nil && resp.StatusCode >= 404 {
-		return true, nil
+	if resp != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		return false, nil
 	}
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }
