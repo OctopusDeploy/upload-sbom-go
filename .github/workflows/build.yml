@@ -152,7 +152,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
-  #         files: |
-  #           release-assets/*
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
