@@ -143,24 +143,26 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 		_ = Body.Close()
 	}(resp.Body)
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("parent project lookup failed with status %d: %s", resp.StatusCode, respBody)
-	}
-
-	var project Project
-	_ = json.NewDecoder(resp.Body).Decode(&project)
-	if project.Name == "" {
+	if resp.StatusCode == http.StatusNotFound {
 		fmt.Printf("Parent project %q not found, creating it...\n", parentName)
 		uuid, err := createParent(dependencyTrackUrl, dependencyTrackKey, parentName, tags, client)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("Parent project %q created (uuid: %s).\n", parentName, uuid)
-	} else {
-		fmt.Printf("Parent project %q found (uuid: %s).\n", parentName, project.UUID)
+		return nil
 	}
 
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("parent project lookup failed with status %d: %s", resp.StatusCode, respBody)
+	}
+
+	var project Project
+	if err := json.NewDecoder(resp.Body).Decode(&project); err != nil {
+		return fmt.Errorf("unable to decode response: %w", err)
+	}
+	fmt.Printf("Parent project %q found (uuid: %s).\n", parentName, project.UUID)
 	return nil
 }
 

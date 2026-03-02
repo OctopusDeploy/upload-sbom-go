@@ -238,8 +238,7 @@ func TestEnsureParentExists_ParentNotFoundCreatesIt(t *testing.T) {
 	putCalled := false
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/project/lookup", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(Project{}) // empty Name signals not found
+		w.WriteHeader(http.StatusNotFound)
 	})
 	mux.HandleFunc("/api/v1/project", func(w http.ResponseWriter, r *http.Request) {
 		putCalled = true
