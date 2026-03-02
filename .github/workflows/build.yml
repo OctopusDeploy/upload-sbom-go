@@ -84,7 +84,7 @@ jobs:
       - name: Extract version from tag
         id: vars
         run: |
-          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="0.0.1-test"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
