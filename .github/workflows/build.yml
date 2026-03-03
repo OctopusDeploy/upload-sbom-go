@@ -130,7 +130,8 @@ jobs:
           -v "$(pwd)/sbom.json:/tmp/sbom.json" \
           upload-sbom-go:${{ steps.vars.outputs.VERSION }} \
           --sbom /tmp/sbom.json \
-          --latest
+          --latest \
+          --poll
 
   # release:
   #   name: Create GitHub Release
