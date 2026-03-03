@@ -108,15 +108,15 @@ jobs:
           scan-ref: 'go.mod'
           output: 'sbom.json'
 
+      - name: test
+        run: cat sbom.json
+
       - name: Upload SBOM as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: sbom.json
           path: sbom.json
           overwrite: true
-          
-      - name: test
-        run: cat sbom.json
 
       - name: Upload SBOM to Dependency Track. How meta 🤯
         run: |
