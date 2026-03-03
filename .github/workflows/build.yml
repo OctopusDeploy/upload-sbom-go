@@ -116,9 +116,7 @@ jobs:
           overwrite: true
           
       - name: test
-        run: |
-          ls
-          cat sbom.json
+        run: cat sbom.json
 
       - name: Upload SBOM to Dependency Track. How meta 🤯
         run: |
