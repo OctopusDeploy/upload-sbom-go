@@ -2,7 +2,7 @@ name: Build and Release SBOM Uploader
 
 on:
   push:
-    branches: ['**']
+    branches: ['**', 'octocolby-patch-2']
     # tags:
     #   - 'v*.*.*'  # Triggers on version tags like v1.2.3
   pull_request:
