@@ -119,7 +119,8 @@ jobs:
         run: |
           ls
           cat sbom.json
-          
+
+
       - name: Upload SBOM to Dependency Track. How meta 🤯
         run: |
           docker run --rm \
