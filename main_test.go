@@ -13,13 +13,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/spf13/viper"
 )
-
-// setupViper initialises the global viper instance that uploadSbom() reads from.
-func setupViper() {
-	v = viper.New()
-}
 
 // noRetryClient returns a client with retries disabled, suitable for unit tests.
 func noRetryClient() *retryablehttp.Client {
@@ -29,7 +23,6 @@ func noRetryClient() *retryablehttp.Client {
 }
 
 // writeTempSbom writes content to a temp file and returns its path.
-
 func writeTempSbom(t *testing.T, content []byte) string {
 	t.Helper()
 	tmp, err := os.CreateTemp(t.TempDir(), "sbom-*.json")
@@ -70,10 +63,9 @@ func TestUploadSbom_Returns200(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setupViper()
 	sbomPath := writeTempSbom(t, []byte(`{"bomFormat":"CycloneDX"}`))
 
-	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", noRetryClient())
+	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", false, noRetryClient())
 	if err != nil {
 		t.Errorf("expected nil error, got: %v", err)
 	}
@@ -86,10 +78,9 @@ func TestUploadSbom_400ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setupViper()
 	sbomPath := writeTempSbom(t, []byte(`THIS IS NOT JSON`))
 
-	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", noRetryClient())
+	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", false, noRetryClient())
 	if err == nil {
 		t.Error("expected error for HTTP 400, got nil")
 	}
@@ -101,10 +92,9 @@ func TestUploadSbom_500ReturnsError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setupViper()
 	sbomPath := writeTempSbom(t, []byte(`{}`))
 
-	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", noRetryClient())
+	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", false, noRetryClient())
 	if err == nil {
 		t.Error("expected error for HTTP 500, got nil")
 	}
@@ -126,10 +116,9 @@ func TestUploadSbom_SendsFormFields(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setupViper()
 	sbomPath := writeTempSbom(t, []byte(`{"bomFormat":"CycloneDX"}`))
 
-	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "2.0.0", sbomPath, "tag1,tag2", noRetryClient())
+	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "2.0.0", sbomPath, "tag1,tag2", false, noRetryClient())
 	if err != nil {
 		t.Fatalf("uploadSbom returned unexpected error: %v", err)
 	}
@@ -163,11 +152,9 @@ func TestUploadSbom_IsLatestFieldSentWhenTrue(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setupViper()
-	v.Set("latest", true)
 	sbomPath := writeTempSbom(t, []byte(`{"bomFormat":"CycloneDX"}`))
 
-	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", noRetryClient())
+	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", true, noRetryClient())
 	if err != nil {
 		t.Fatalf("uploadSbom returned unexpected error: %v", err)
 	}
@@ -188,11 +175,9 @@ func TestUploadSbom_IsLatestFieldAbsentWhenFalse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	setupViper()
-	// v.GetBool("latest") defaults to false
 	sbomPath := writeTempSbom(t, []byte(`{"bomFormat":"CycloneDX"}`))
 
-	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", noRetryClient())
+	_, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", false, noRetryClient())
 	if err != nil {
 		t.Fatalf("uploadSbom returned unexpected error: %v", err)
 	}
@@ -202,10 +187,27 @@ func TestUploadSbom_IsLatestFieldAbsentWhenFalse(t *testing.T) {
 }
 
 func TestUploadSbom_MissingFileReturnsError(t *testing.T) {
-	setupViper()
-	_, err := uploadSbom("http://localhost", "key", "proj", "parent", "1.0", "/nonexistent/path.json", "", noRetryClient())
+	_, err := uploadSbom("http://localhost", "key", "proj", "parent", "1.0", "/nonexistent/path.json", "", false, noRetryClient())
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
+	}
+}
+
+func TestUploadSbom_ReturnsToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"token": "my-token-xyz"})
+	}))
+	defer server.Close()
+
+	sbomPath := writeTempSbom(t, []byte(`{"bomFormat":"CycloneDX"}`))
+
+	token, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", false, noRetryClient())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if token != "my-token-xyz" {
+		t.Errorf("token: got %q, want %q", token, "my-token-xyz")
 	}
 }
 
@@ -385,25 +387,6 @@ func TestPollImport_TimesOut(t *testing.T) {
 	err := pollImport(server.URL, "test-key", "test-token", noRetryClient(), 0)
 	if err == nil {
 		t.Error("expected error when server is unreachable, got nil")
-	}
-}
-
-func TestUploadSbom_ReturnsToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"token": "my-token-xyz"})
-	}))
-	defer server.Close()
-
-	setupViper()
-	sbomPath := writeTempSbom(t, []byte(`{"bomFormat":"CycloneDX"}`))
-
-	token, err := uploadSbom(server.URL, "test-key", "my-project", "my-parent", "1.0.0", sbomPath, "", noRetryClient())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if token != "my-token-xyz" {
-		t.Errorf("token: got %q, want %q", token, "my-token-xyz")
 	}
 }
 
