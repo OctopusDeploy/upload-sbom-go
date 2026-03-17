@@ -13,14 +13,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 
 	"github.com/hashicorp/go-retryablehttp"
-)
-
-var (
-	v *viper.Viper
 )
 
 type Tag struct {
@@ -60,20 +54,7 @@ func main() {
 		Short: "Uploads SBOM to Dependency-Track",
 		RunE:  runUploader,
 	}
-
-	// Initialise flags
 	setFlags(rootCmd.Flags())
-
-	// Create the viper instance
-	v = viper.New()
-	v.SetEnvPrefix("SBOM_UPLOADER")
-	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
-	v.AutomaticEnv()
-	err := v.BindPFlags(rootCmd.Flags())
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to bind flags: %v\n", err)
-		os.Exit(1)
-	}
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Execution failed: %v\n", err)
@@ -166,7 +147,7 @@ func ensureParentExists(dependencyTrackUrl string, dependencyTrackKey string, pa
 	return nil
 }
 
-func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string, tags string, client *retryablehttp.Client) (string, error) {
+func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectName string, parentName string, projectVersion string, sbomFilePath string, tags string, latest bool, client *retryablehttp.Client) (string, error) {
 	// Read SBOM from file or stdin
 	var sbomContent []byte
 	var err error
@@ -209,7 +190,7 @@ func uploadSbom(dependencyTrackUrl string, dependencyTrackKey string, projectNam
 	_ = writer.WriteField("autoCreate", "true")
 	_ = writer.WriteField("tags", tags)
 
-	if v.GetBool("latest") {
+	if latest {
 		_ = writer.WriteField("isLatest", "true")
 	}
 
@@ -320,53 +301,33 @@ func fetchProjectSummary(dependencyTrackUrl string, dependencyTrackKey string, p
 	return &project, nil
 }
 
-func runUploader(cmd *cobra.Command, args []string) error {
+func runUploader(cmd *cobra.Command, _ []string) error {
+	cfg, err := loadConfig(cmd.Flags())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
 
-	dependencyTrackUrl := v.GetString("url")
-	dependencyTrackKey := v.GetString("api-key")
-	projectName := v.GetString("name")
-	parentName := v.GetString("parent")
-	projectVersion := v.GetString("version")
-	sbomFilePath := v.GetString("sbom")
-	// Check required inputs
-	if dependencyTrackUrl == "" {
-		return fmt.Errorf("missing required inputs: url (via flags or env)")
-	}
-	if dependencyTrackKey == "" {
-		return fmt.Errorf("missing required inputs: api-key (via flags or env)")
-	}
-	if projectName == "" {
-		return fmt.Errorf("missing required inputs: name (via flags or env)")
-	}
-	if parentName == "" {
-		return fmt.Errorf("missing required inputs: name (via flags or env)")
-	}
-	if projectVersion == "" {
-		return fmt.Errorf("missing required inputs: version (via flags or env)")
-	}
-	tags := ""
-	if projectTags := v.GetString("tags"); projectTags != "" {
-		tags = projectTags
+	if err := cfg.validate(); err != nil {
+		return err
 	}
 
 	client := newDefaultRetryClient()
 
-	err := ensureParentExists(dependencyTrackUrl, dependencyTrackKey, parentName, tags, client)
-	if err != nil {
+	if err := ensureParentExists(cfg.URL, cfg.APIKey, cfg.Parent, cfg.Tags, client); err != nil {
 		return err
 	}
-	token, err := uploadSbom(dependencyTrackUrl, dependencyTrackKey, projectName, parentName, projectVersion, sbomFilePath, tags, client)
+	token, err := uploadSbom(cfg.URL, cfg.APIKey, cfg.Name, cfg.Parent, cfg.Version, cfg.SBOM, cfg.Tags, cfg.Latest, client)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("✅ SBOM upload successful.")
-	if v.GetBool("poll") {
+	if cfg.Poll {
 		fmt.Println("⏳ Polling until fully imported...")
-		if err := pollImport(dependencyTrackUrl, dependencyTrackKey, token, client, 2*time.Second); err != nil {
+		if err := pollImport(cfg.URL, cfg.APIKey, token, client, 2*time.Second); err != nil {
 			return err
 		}
-		project, err := fetchProjectSummary(dependencyTrackUrl, dependencyTrackKey, projectName, projectVersion, client)
+		project, err := fetchProjectSummary(cfg.URL, cfg.APIKey, cfg.Name, cfg.Version, client)
 		if err != nil {
 			return err
 		}
@@ -379,18 +340,6 @@ func runUploader(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func setFlags(s *pflag.FlagSet) {
-	s.String("url", "", "Dependency-Track API base URL or env SBOM_UPLOADER_URL")
-	s.String("api-key", "", "Dependency-Track API key or env SBOM_UPLOADER_API_KEY")
-	s.String("name", "", "Project name or env SBOM_UPLOADER_NAME")
-	s.String("version", "", "Project version or env SBOM_UPLOADER_VERSION")
-	s.String("parent", "", "Parent project name or env SBOM_UPLOADER_PARENT")
-	s.Bool("latest", true, "Mark as latest version (default true)")
-	s.Bool("poll", false, "Poll until import completes or env SBOM_UPLOADER_POLL")
-	s.String("tags", "", "Comma-separated project tags or env SBOM_UPLOADER_TAGS")
-	s.String("sbom", "", "Path to SBOM file (optional; otherwise read from stdin)")
 }
 
 func checkRetry(ctx context.Context, resp *http.Response, err error) (bool, error) {
